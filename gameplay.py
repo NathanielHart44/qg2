@@ -1,6 +1,10 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
-from models import User as DBUser, Player as DBPlayer, League as DBLeague, Team as DBTeam, Game as DBGame, GameIntervalLog as DBGIL
+from models import (
+    User as DBUser, Player as DBPlayer,
+    League as DBLeague, Team as DBTeam, Game as DBGame,
+    GameIntervalLog as DBGIL, Snitch as DBSnitch, Bludger as DBBludger
+)
 import random
 
 # ----------------------------------------------------------------------
@@ -11,6 +15,9 @@ starter_depth_thresholds = {
     "Beater": 2,
     "Chaser": 3
 }
+
+matrix_size = {'x': 13, 'y': 8, 'z': 8}
+spacing = 1.0
 
 # ----------------------------------------------------------------------
 
@@ -123,3 +130,111 @@ def handle_team_performance(db: Session, game_id: int) -> dict:
 # calculate the performance of each team by calling handle_team_performance.
 # update teh game's scores.
 # check if game should end, and if so, end the game.
+
+
+
+
+
+
+
+def handle_player_movement(db: Session, team_id: int, game_id: int) -> dict:
+    team = db.query(DBTeam).filter(DBTeam.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found - player movement")
+
+    game = db.query(DBGame).filter(DBGame.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail=f"Game ({game_id}) not found - player movement")
+
+    # Get the team's starting lineup
+    starters = get_team_lineup(db, team_id, "starters")
+
+    # Generate a random number for each player
+    player_movements = {}
+
+    player_movements = {}
+    for position_name in starter_depth_thresholds:
+        for count, player in enumerate(starters[position_name]):
+            player_movement = generate_player_position(player)
+
+            player_movements[f"{position_name}_{count + 1}"] = player_movement
+
+    return player_movements
+
+def generate_player_position(player: DBPlayer):
+    if not player.target_x and not player.target_y and not player.target_z:
+        player.location_x = (random.random() * (matrix_size['x'] - 1) - (matrix_size['x'] - 1) / 2) * spacing
+        player.location_y = (random.random() * (matrix_size['y'] - 1) - (matrix_size['y'] - 1) / 2) * spacing
+        player.location_z = (random.random() * (matrix_size['z'] - 1) - (matrix_size['z'] - 1) / 2) * spacing
+    else:
+        player.location_x = player.target_x
+        player.location_y = player.target_y
+        player.location_z = player.target_z
+    player.target_x = (random.random() * (matrix_size['x'] - 1) - (matrix_size['x'] - 1) / 2) * spacing
+    player.target_y = (random.random() * (matrix_size['y'] - 1) - (matrix_size['y'] - 1) / 2) * spacing
+    player.target_z = (random.random() * (matrix_size['z'] - 1) - (matrix_size['z'] - 1) / 2) * spacing
+    position = {
+        'x': player.location_x,
+        'y': player.location_y,
+        'z': player.location_z
+    }
+    target = {
+        'x': player.target_x,
+        'y': player.target_y,
+        'z': player.target_z
+    }
+
+    return {
+        'id': player.id,
+        'position': position,
+        'target': target
+    }
+
+def handle_snitch_placement(db: Session, game_id: int) -> dict:
+    game = db.query(DBGame).filter(DBGame.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found - snitch placement")
+
+    if not game.snitch:
+        snitch = DBSnitch(
+            x=(random.random() * (matrix_size['x'] - 1) - (matrix_size['x'] - 1) / 2) * spacing,
+            y=(random.random() * (matrix_size['y'] - 1) - (matrix_size['y'] - 1) / 2) * spacing,
+            z=(random.random() * (matrix_size['z'] - 1) - (matrix_size['z'] - 1) / 2) * spacing,
+            game_id=game_id
+        )
+        db.add(snitch)
+        db.commit()
+    else:
+        snitch = game.snitch
+        snitch.x = (random.random() * (matrix_size['x'] - 1) - (matrix_size['x'] - 1) / 2) * spacing
+        snitch.y = (random.random() * (matrix_size['y'] - 1) - (matrix_size['y'] - 1) / 2) * spacing
+        snitch.z = (random.random() * (matrix_size['z'] - 1) - (matrix_size['z'] - 1) / 2) * spacing
+        db.commit()
+
+def handle_snitch_catch(db: Session, game_id: int) -> bool:
+    game = db.query(DBGame).filter(DBGame.id == game_id).first()
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found - snitch catch")
+    
+    snitch: DBSnitch = game.snitch
+
+    team_1 = db.query(DBTeam).filter(DBTeam.id == game.home_team_id).first()
+    team_2 = db.query(DBTeam).filter(DBTeam.id == game.away_team_id).first()
+    if not team_1 or not team_2:
+        raise HTTPException(status_code=404, detail="Teams not found")
+    
+    seeker_1 = db.query(DBPlayer).filter(DBPlayer.team_id == team_1.id, DBPlayer.current_position == "Seeker").first()
+    seeker_2 = db.query(DBPlayer).filter(DBPlayer.team_id == team_2.id, DBPlayer.current_position == "Seeker").first()
+
+    distance_1 = ((seeker_1.location_x - snitch.x) ** 2 + (seeker_1.location_y - snitch.y) ** 2 + (seeker_1.location_z - snitch.z) ** 2) ** 0.5
+    distance_2 = ((seeker_2.location_x - snitch.x) ** 2 + (seeker_2.location_y - snitch.y) ** 2 + (seeker_2.location_z - snitch.z) ** 2) ** 0.5
+
+    if distance_1 < 5 or distance_2 < 5:
+        if distance_1 < distance_2:
+            return 'HOME'
+        elif distance_2 < distance_1:
+            return 'AWAY'
+        else:
+            None
+    else:
+        return None

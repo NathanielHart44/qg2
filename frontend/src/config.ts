@@ -7,7 +7,7 @@ import { PATH_PAGE } from './routes/paths';
 export const HOST_API = '';
 
 export const MAIN_API = {
-  web_socket_url: "ws://localhost:8080/game/",
+  web_socket_url: "ws://127.0.0.1:8000/game/",
   // web_socket_url: "wss://nftybot.django.nftyarcade.io/chat/",
   base_url: "http://localhost:8080/",
   // base_url: "http://192.168.1.226:8080/",

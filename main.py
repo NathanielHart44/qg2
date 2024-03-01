@@ -1,17 +1,23 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Form
+from fastapi import FastAPI, HTTPException, Depends, status, Form, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from models import User as DBUser, Player as DBPlayer, League as DBLeague, Team as DBTeam, Game as DBGame
+from models import User as DBUser, Player as DBPlayer, League as DBLeague, Team as DBTeam, Game as DBGame, GameIntervalLog as DBGIL
 from schemas import User, Player, LeagueCreate, TeamCreate
 from fastapi.security import OAuth2PasswordRequestForm
 from contextlib import asynccontextmanager
 from database import get_db, create_db_and_tables
 from auth import authenticate_user, gen_access_token, get_token, get_user_auth, hash_password, get_current_admin_user
 from gen_players import generate_players as gen_players
-from gameplay import check_all_positions_filled, get_missing_starters, get_team_lineup, handle_team_performance
+from gameplay import (
+    check_all_positions_filled, get_missing_starters, get_team_lineup, handle_team_performance,
+    handle_player_movement, handle_snitch_catch, handle_snitch_placement
+)
 from helpers import *
 from typing import List
 import logging
+import json
+import random
+import asyncio
 
 # ----------------------------------------------------------------------
 
@@ -288,3 +294,99 @@ def test_team_performance(db: Session = Depends(get_db), token: str = Depends(ge
 
     result = handle_team_performance(db, new_game.id)
     return result
+
+@app.websocket("/game/{game_id}")
+async def websocket_endpoint(websocket: WebSocket, game_id: int, db: Session = Depends(get_db)):
+    try:
+        current_game = None
+        increment = 1
+        total_time = 5
+        if game_id is None:
+            await websocket.accept()
+            await websocket.send_json({"message": "Game ID not provided"})
+            await websocket.close()
+            return
+        await websocket.accept()
+
+        game_started = False
+        game_time = 0
+        while True:
+            if not game_started:
+                data = await websocket.receive_text()
+                data = json.loads(data)
+                print(data)
+                if data['type'] == "start_game":
+                    current_game = db.query(DBGame).filter(DBGame.id == game_id).first()
+                    if not current_game:
+                        current_game = DBGame(id=game_id, season_id=1, home_team_id=1, away_team_id=2, status="scheduled")
+                        db.add(current_game)
+                        db.commit()
+                        current_game = db.query(DBGame).filter(DBGame.id == game_id).first()
+
+                    print(f"Game started: {current_game.id}")
+                    game_started = True
+                    await websocket.send_json({"message": f"Game started"})
+                else:
+                    await websocket.send_json({"message": f"Message text was: {data}"})
+            else:
+                if game_time == total_time / increment:
+                    await websocket.send_json({"type": "game_over",  "message": "Game over"})
+                    break
+
+                # get the most recent game log
+                if game_time == 0:
+                    last_log = None
+                    db.query(DBGIL).filter(DBGIL.game_id == current_game.id).delete()
+                else:
+                    last_log = db.query(DBGIL).filter(DBGIL.game_id == current_game.id).order_by(DBGIL.order.desc()).first()
+                game_time += increment
+
+                handle_snitch_placement(db, current_game.id)
+                catch_result = handle_snitch_catch(db, current_game.id)
+
+                home_score = last_log.home_score if last_log else 0
+                away_score = last_log.away_score if last_log else 0
+
+                if catch_result == "HOME":
+                    home_score += 35
+                elif catch_result == "AWAY":
+                    away_score += 35
+
+                new_log = DBGIL(
+                    game_id=current_game.id,
+                    order=game_time / increment,
+                    home_score=home_score,
+                    away_score=away_score
+                )
+                db.add(new_log)
+                db.commit()
+
+                data = {
+                    "type": "game_state_update",
+                    "message":
+                        {
+                            "score": {
+                                "team_1": home_score,
+                                "team_2": away_score
+                            },
+                            "settings": {
+                                "total_time": total_time,
+                                "interval": increment,
+                                "current_time": game_time,
+                                "matrix_size": { "x": 13, "y": 8, "z": 8 },
+                                "spacing": 1.0,
+                                "speed": 0.1,
+                                "team_1_color": 0xff0000,
+                                "team_2_color": 0x0000ff
+                            },
+                            "team_1": handle_player_movement(db, 1, current_game.id),
+                            "team_2": handle_player_movement(db, 2, current_game.id)
+                        }
+                }
+                await websocket.send_json(data)
+                await asyncio.sleep(1)
+    except WebSocketDisconnect:
+        print("Client disconnected")
+    except Exception as e:
+        print(f"Error: {e}")
+        await websocket.close()

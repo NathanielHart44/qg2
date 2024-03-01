@@ -19,7 +19,6 @@ const useWS = () => {
         if (gameID) {
             setCurrentSession(gameID);
         };
-        console.log('Game ID: ' + gameID);
     }, [gameID]);
 
     useEffect(() => { setConnectionStatus(translateState(readyState)) }, [readyState]);

@@ -29,6 +29,12 @@ class PlayerBase(BaseModel):
     current_position: str
     depth: Optional[int] = None
     team_id: Optional[int] = None
+    location_x: Optional[int] = 0
+    location_y: Optional[int] = 0
+    location_z: Optional[int] = 0
+    target_x: Optional[int] = 0
+    target_y: Optional[int] = 0
+    target_z: Optional[int] = 0
 
 class PlayerCreate(PlayerBase):
     pass
@@ -82,6 +88,36 @@ class Season(SeasonBase):
     class Config:
         from_attributes = True
 
+class SnitchBase(BaseModel):
+    x: int
+    y: int
+    z: int
+
+class SnitchCreate(SnitchBase):
+    pass
+
+class Snitch(SnitchBase):
+    id: int
+    game_id: int
+
+    class Config:
+        from_attributes = True
+
+class BludgerBase(BaseModel):
+    x: int
+    y: int
+    z: int
+
+class BludgerCreate(BludgerBase):
+    pass
+
+class Bludger(BludgerBase):
+    id: int
+    game_id: int
+
+    class Config:
+        from_attributes = True
+
 class GameBase(BaseModel):
     start_time: datetime
     status: str
@@ -95,6 +131,9 @@ class Game(GameBase):
     league_id: int
     home_team_id: int
     away_team_id: int
+    snitch: Snitch
+    bludger_1: Bludger
+    bludger_2: Bludger
 
     class Config:
         from_attributes = True

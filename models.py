@@ -31,6 +31,25 @@ class Season(Base):
     game_interval = Column(Integer)
     games = relationship("Game", back_populates="season", cascade="all, delete")
 
+class Snitch(Base):
+    __tablename__ = "snitches"
+
+    id = Column(Integer, primary_key=True, index=True)
+    game_id = Column(Integer, ForeignKey("games.id", ondelete="CASCADE"))
+    game = relationship("Game", back_populates="snitch")
+    x = Column(Integer)
+    y = Column(Integer)
+    z = Column(Integer)
+
+class Bludger(Base):
+    __tablename__ = "bludgers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    game_id = Column(Integer, ForeignKey("games.id", ondelete="CASCADE"))
+    x = Column(Integer)
+    y = Column(Integer)
+    z = Column(Integer)
+
 class Game(Base):
     __tablename__ = "games"
 
@@ -44,6 +63,11 @@ class Game(Base):
     start_time = Column(DateTime)
     status = Column(String)
     interval_logs = relationship("GameIntervalLog", back_populates="game", cascade="all, delete")
+    snitch = relationship("Snitch", uselist=False, back_populates="game", cascade="all, delete")
+    bludger_1_id = Column(Integer, ForeignKey("bludgers.id", ondelete="CASCADE"))
+    bludger_1 = relationship("Bludger", foreign_keys=[bludger_1_id], backref="game_as_bludger_1")
+    bludger_2_id = Column(Integer, ForeignKey("bludgers.id", ondelete="CASCADE"))
+    bludger_2 = relationship("Bludger", foreign_keys=[bludger_2_id], backref="game_as_bludger_2")
 
 class GameIntervalLog(Base):
     __tablename__ = "game_interval_logs"
@@ -52,8 +76,8 @@ class GameIntervalLog(Base):
     game_id = Column(Integer, ForeignKey("games.id", ondelete="CASCADE"))
     game = relationship("Game", back_populates="interval_logs")
     order = Column(Integer)
-    home_score = Column(Integer)
-    away_score = Column(Integer)
+    home_score = Column(Integer, default=0)
+    away_score = Column(Integer, default=0)
 
 class Team(Base):
     __tablename__ = "teams"
@@ -89,3 +113,9 @@ class Player(Base):
     depth = Column(Integer, nullable=True, default=0)
     team_id = Column(Integer, ForeignKey("teams.id"), nullable=True)
     team = relationship("Team", back_populates="players", foreign_keys=[team_id])
+    location_x = Column(Integer, nullable=True, default=0)
+    location_y = Column(Integer, nullable=True, default=0)
+    location_z = Column(Integer, nullable=True, default=0)
+    target_x = Column(Integer, nullable=True, default=0)
+    target_y = Column(Integer, nullable=True, default=0)
+    target_z = Column(Integer, nullable=True, default=0)

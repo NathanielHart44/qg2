@@ -291,6 +291,48 @@ export type KeywordPairType = {
     description: string;
 };
 
+// ----------------------------------------------------------------------
+
+export type Player = {
+    id: number;
+    first_name: string;
+    last_name: string;
+    country: string;
+    age: number;
+    years_pro: number;
+    toughness: number;
+    awareness: number;
+    teamwork: number;
+    speed: number;
+    strength: number;
+    skill: number;
+    injury: number;
+    primary_position: string;
+    current_position: string;
+    depth: number | null;
+    team: Team | null;
+}
+
+export type Team = {
+    id: number;
+    name: string;
+    owner: User;
+    // league: League;
+    players: Player[];
+    home_games: QGame[];
+    away_games: QGame[];
+}
+
+export type QGame = {
+    id: number;
+    // season: Season;
+    home_team: Team;
+    away_team: Team;
+    start_time: string;
+    status: string;
+    // interval_logs: GameIntervalLog[];
+}
+
 export type ACTION_TYPE =  'draw' | 'place_in_deck' | 'place_in_hand' | 'discard' | 'play' | 'leave_note' | 'update_play_notes' ;
 export const allSteps = ['Deck', 'Hand', 'In Play', 'Discard'];
 
